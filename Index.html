@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Directorio de Ingenieros de Campos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { background-color: #888; margin: 0; font-family: 'Arial', sans-serif; }
+        .container { max-width: 800px; margin: auto; padding: 20px; }
+        h1 { color: white; font-size: 2.5rem; font-weight: bold; margin: 20px 0; display: flex; align-items: center; }
+        .logo { width: 50px; height: auto; margin-right: 10px; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 8px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; }
+        button { padding: 8px 12px; font-size: 0.9rem; cursor: pointer; border: none; border-radius: 5px; background-color: #dc3545; color: white; margin-top: 10px; }
+        button:hover { background-color: #c82333; }
+        #result, #supervisor-result, #details { margin-top: 20px; padding: 10px; border: 1px solid #ccc; background-color: white; border-radius: 5px; display: none; }
+        #result-content, #supervisor-content, #details-content { margin-top: 10px; }
+        .result-item { padding: 5px; border: 1px solid #ccc; margin: 5px 0; background-color: white; border-radius: 5px; cursor: pointer; }
+        .result-item:hover { background-color: #f0f0f0; }
+        .details-table { width: 100%; border-collapse: collapse; }
+        .details-table th, .details-table td { border: 1px solid #ddd; padding: 8px; }
+        .footer { margin-top: 20px; text-align: center; color: white; font-size: 0.9rem; }
+        .sheet-name { color: white; margin-left: 10px; }
+        .supervisor-table { margin-top: 20px; width: 100%; border-collapse: collapse; }
+        .supervisor-table th, .supervisor-table td { border: 1px solid #ddd; padding: 8px; }
+        .supervisor-table th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <img src="claro-logo.png" alt="Logo de Claro" class="logo">
+            Directorio de los Ingenieros de Campos
+        </h1>
+        
+        <h2>Cargar Archivo</h2>
+        <input type="file" id="file-input" accept=".xlsx, .xls"/>
+        <button id="load-button">Cargar Datos</button>
+
+        <h2>Buscar Datos</h2>
+        <input type="text" id="search-input" placeholder="Buscar..."/>
+        <button id="search-button">Buscar</button>
+        <button id="clear-button">Limpiar</button>
+        <span id="sheet-name" class="sheet-name"></span>
+
+        <div id="result">
+            <h2>Resultados:</h2>
+            <div id="result-content"></div>
+        </div>
+
+        <h2>Datos de Supervisores</h2>
+        <button id="supervisores-button">Mostrar Supervisores</button>
+        <div id="supervisor-result">
+            <h2>Resultados de Supervisores:</h2>
+            <table class="supervisor-table">
+                <thead id="supervisor-header"></thead>
+                <tbody id="supervisor-content"></tbody>
+            </table>
+        </div>
+
+        <div id="details">
+            <h2>Detalles:</h2>
+            <h3 id="details-sheet-name"></h3>
+            <table class="details-table" id="details-table">
+                <thead>
+                    <tr>
+                        <th>Hoja</th>
+                        <th>Site ID</th>
+                        <th>Local</th>
+                        <th>Clasificación Local</th>
+                        <th>Responsable</th>
+                        <th>Contacto</th>
+                    </tr>
+                </thead>
+                <tbody id="details-content"></tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            Desarrollado por [Josue Morillo] - Versión 1.0
+        </div>
+    </div>
+
+    <script>
+        let dataBySheet = {}; // Objeto para almacenar datos por hoja
+
+        document.getElementById('file-input').addEventListener('change', handleFile, false);
+        document.getElementById('load-button').addEventListener('click', handleFile, false);
+        document.getElementById('search-button').addEventListener('click', searchData, false);
+        document.getElementById('clear-button').addEventListener('click', clearSearch, false);
+        document.getElementById('supervisores-button').addEventListener('click', displaySupervisores, false);
+
+        function handleFile(event) {
+            const file = document.getElementById('file-input').files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                const workbook = XLSX.read(content, { type: 'binary' });
+                dataBySheet = {};
+                
+                workbook.SheetNames.forEach(sheet => {
+                    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheet]);
+                    dataBySheet[sheet] = rows;
+                });
+
+                console.log('Datos cargados:', dataBySheet);
+                alert('Archivo cargado con éxito!');
+                document.getElementById('sheet-name').innerHTML = `Hoja(s) cargadas: ${workbook.SheetNames.join(', ')}`;
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        function searchData() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const results = [];
+
+            for (const [sheetName, rows] of Object.entries(dataBySheet)) {
+                const filteredRows = rows.filter(row => {
+                    return Object.values(row).some(value => 
+                        String(value).toLowerCase().includes(query)
+                    );
+                });
+                if (filteredRows.length > 0) {
+                    results.push({ sheetName, rows: filteredRows });
+                }
+            }
+
+            displayResults(results);
+        }
+
+        function displayResults(results) {
+            const resultContent = document.getElementById('result-content');
+            resultContent.innerHTML = '';
+
+            if (results.length === 0) {
+                resultContent.innerHTML = '<p>No se encontraron resultados.</p>';
+            } else {
+                results.forEach(result => {
+                    const sheetHeader = document.createElement('h3');
+                    sheetHeader.innerHTML = `Resultados de la hoja: ${result.sheetName}`;
+                    resultContent.appendChild(sheetHeader);
+
+                    result.rows.forEach(row => {
+                        const rowDiv = document.createElement('div');
+                        rowDiv.className = 'result-item';
+                        rowDiv.innerHTML = `<strong>${JSON.stringify(row)}</strong> (Hoja: ${result.sheetName})`;
+                        rowDiv.onclick = () => displayDetails(row, result.sheetName);
+                        resultContent.appendChild(rowDiv);
+                    });
+                });
+            }
+
+            document.getElementById('result').style.display = 'block';
+        }
+
+        function clearSearch() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('result-content').innerHTML = '';
+            document.getElementById('supervisor-result').style.display = 'none';
+            document.getElementById('supervisor-content').innerHTML = '';
+            document.getElementById('details').style.display = 'none';
+            document.getElementById('details-content').innerHTML = '';
+            document.getElementById('details-sheet-name').innerHTML = '';
+        }
+
+        function displaySupervisores() {
+            const supervisorRows = dataBySheet['Supervisores'];
+            const supervisorContent = document.getElementById('supervisor-content');
+            const supervisorHeader = document.getElementById('supervisor-header');
+            supervisorContent.innerHTML = '';
+            supervisorHeader.innerHTML = '';
+
+            // Definir las columnas que queremos mostrar
+            const columnsToShow = ['Zona', 'Supervisor', 'Contacto Supervisor', 'Gerente', 'Contacto Gerente', 'Zona Geografica'];
+
+            // Crear encabezados
+            columnsToShow.forEach(column => {
+                const th = document.createElement('th');
+                th.innerText = column;
+                supervisorHeader.appendChild(th);
+            });
+
+            if (!supervisorRows || supervisorRows.length === 0) {
+                supervisorContent.innerHTML = '<tr><td colspan="6">No se encontraron datos en la hoja "Supervisores".</td></tr>';
+            } else {
+                supervisorRows.forEach(row => {
+                    const tableRow = document.createElement('tr');
+                    tableRow.innerHTML = columnsToShow.map(col => `<td>${row[col] !== undefined ? row[col] : 'N/A'}</td>`).join('');
+                    supervisorContent.appendChild(tableRow);
+                });
+            }
+
+            document.getElementById('supervisor-result').style.display = 'block';
+        }
+
+        function displayDetails(row, sheetName) {
+            const detailsContent = document.getElementById('details-content');
+            detailsContent.innerHTML = '';
+
+            const values = Object.values(row);
+            const detailsRow = document.createElement('tr');
+            detailsRow.innerHTML = `
+                <td>${sheetName || 'N/A'}</td>
+                <td>${values[0] || 'N/A'}</td>
+                <td>${values[1] || 'N/A'}</td>
+                <td>${values[2] || 'N/A'}</td>
+                <td>${values[3] || 'N/A'}</td>
+                <td>${values[4] || 'N/A'}</td>
+            `;
+            detailsContent.appendChild(detailsRow);
+
+            document.getElementById('details-sheet-name').innerHTML = `Detalles de la hoja: ${sheetName}`;
+            document.getElementById('details').style.display = 'block';
+            document.getElementById('details-table').style.display = 'table';
+        }
+    </script>
+</body>
+</html>
